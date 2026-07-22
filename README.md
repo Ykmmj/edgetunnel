@@ -122,6 +122,7 @@
 | **KEY** | ❌ | `CMLiussss` | 快速订阅路径密钥，访问 `/CMLiussss` 即可快速获取节点 |
 | **UUID** | ❌ | `90cd4a77-141a-43c9-991b-08263cfe9c10` | 强制固定UUID，只支持**UUIDv4**标准格式 |
 | **PROXYIP** | ❌ | `proxyip.cmliussss.net:443` | 全局自定义反代 IP  |
+| **PAGES_URL** | ❌ | `https://ykmmj.github.io/EDT-Pages.github.io` | 管理面板静态页面来源；默认使用本仓库配套的 GitHub Pages |
 | **URL** | ❌ | `https://cloudflare-error-page-3th.pages.dev` | 默认主页伪装地址（可填写网页 URL 或 `1101`） |
 | **GO2SOCKS5** | ❌ | `blog.cmliussss.com`,`*.ip111.cn`,`*google.com` | 强制走 SOCKS5 的名单 (`*` 为全局，域名用逗号分隔) |
 | **DEBUG** | ❌ | `1`或`true` | **开发者模式**，默认关闭调试日志功能（console.log），设置`1`或`true`则开启调试日志功能 |
@@ -130,6 +131,20 @@
 | **PRELOAD_RACE_DIAL** | ❌ | `1`或`true` | 默认关闭作为**预加载竞速拨号**的功能，设置`1`或`true`则开启该功能 |
 | **TCP_CONCURRENT_DIAL**   | ❌ | `2` | **TCP 并发拨号数**，默认值为`2`；设置后不再根据中国移动网络自动降为单路 |
 | **PROXY_CONCURRENT_DIAL** | ❌ | `1` | **反代并发拨号数**，默认值为`1`；数值越高连接速度越快，但 IP 切换也越频繁 |
+
+---
+
+## 🧭 PROXYIPPOOL 服务端出口路由
+
+后台管理面板新增 **PROXYIPPOOL 出口路由**：
+
+- 可维护多个 PROXYIP，支持 IPv4、IPv6、域名和端口；粘贴 `IPv6/128` 时会自动移除 CIDR 后缀。
+- 可选择一个默认出口，并为 ChatGPT、Claude、Netflix 分别指定出口；业务选择“跟随默认出口”时使用默认 PROXYIP。
+- 分流在 Worker 服务端按目标域名完成，客户端订阅和节点数量保持不变。
+- 启用 PROXYIPPOOL 后，新 TCP 连接直接使用选中的 PROXYIP；连接失败即终止，不切换池内其他节点，也不回退直连。
+- 未启用 PROXYIPPOOL 时，原有 `PROXYIP`、路径参数及其他代理逻辑保持不变。
+
+配置保存到绑定的 KV `config.json`。同一 Worker 实例通常立即生效，其他实例受 KV 一致性影响可能需要数秒。
 
 ---
 
