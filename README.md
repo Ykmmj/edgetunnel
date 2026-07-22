@@ -134,17 +134,19 @@
 
 ---
 
-## 🧭 PROXYIPPOOL 服务端出口路由
+## 🧩 PROXYIPPOOL 客户端策略组
 
-后台管理面板新增 **PROXYIPPOOL 出口路由**：
+后台管理面板可维护一组 `proxyip`、`socks5` 或 `http` 代理节点。启用后更新 Clash/Mihomo 或 Sing-box 订阅，客户端会得到三个互相独立的选择组：
 
-- 可维护多个 PROXYIP，支持 IPv4、IPv6、域名和端口；粘贴 `IPv6/128` 时会自动移除 CIDR 后缀。
-- 可选择一个默认出口，并为 ChatGPT、Claude、Netflix 分别指定出口；业务选择“跟随默认出口”时使用默认 PROXYIP。
-- 分流在 Worker 服务端按目标域名完成，客户端订阅和节点数量保持不变。
-- 启用 PROXYIPPOOL 后，新 TCP 连接直接使用选中的 PROXYIP；连接失败即终止，不切换池内其他节点，也不回退直连。
-- 未启用 PROXYIPPOOL 时，原有 `PROXYIP`、路径参数及其他代理逻辑保持不变。
+- `ChatGPT`
+- `Claude`
+- `Netflix`
 
-配置保存到绑定的 KV `config.json`。同一 Worker 实例通常立即生效，其他实例受 KV 一致性影响可能需要数秒。
+客户端按对应域名规则自动进入业务组，用户可以在三个组中分别选择不同的池节点。例如 ChatGPT 使用台湾节点、Claude 使用日本节点、Netflix 使用马来西亚节点。
+
+PROXYIPPOOL 只影响订阅生成，不参与 Worker 运行时的服务端域名分流。原有 **Cloudflare CDN 访问设置**、单一 `PROXYIP`、路径参数和其他代理功能保持不变。
+
+`proxyip` 节点支持 IPv4、IPv6、域名和端口；粘贴 `IPv6/128` 时会自动移除 CIDR 后缀。池配置保存到绑定的 KV `config.json`，保存后需要在客户端更新订阅。
 
 ---
 
