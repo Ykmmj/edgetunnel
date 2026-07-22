@@ -1,4 +1,4 @@
-const Version = '2026-07-22 16:09:50';
+const Version = '2026-07-22 16:46:50';
 let config_JSON, 缓存SOCKS5白名单 = null, 调试日志打印 = false;
 let SOCKS5白名单 = ['*tapecontent.net', '*cloudatacdn.com', '*loadshare.org', '*cdn-centaurus.com', 'scholar.google.com'];
 const 默认Pages静态页面 = 'https://ykmmj.github.io/EDT-Pages.github.io';
@@ -433,9 +433,9 @@ export default {
 								let 完整节点路径 = config_JSON.完整节点路径;
 
 								const 链式代理匹配 = 池节点 ? null : 节点备注.match(/\$(socks5|http|https|turn|sstp):\/\/([^#\s]+)/i);
-								if (池节点?.协议 === 'proxyip') {
+								if (池节点?.协议 === 'proxyip' && 池节点.地址.toLowerCase() !== 'auto') {
 									完整节点路径 = (`${config_JSON.PATH}/proxyip=${池节点.地址}`).replace(/\/\//g, '/') + (config_JSON.启用0RTT ? '?ed=2560' : '');
-								} else if (池节点 && ['socks5', 'http'].includes(池节点.协议)) {
+								} else if (池节点 && ['socks5', 'http', 'https', 'turn', 'sstp'].includes(池节点.协议)) {
 									try {
 										const 链式代理数据 = { type: 池节点.协议, ...获取SOCKS5账号(池节点.地址, 获取代理默认端口(池节点.协议)) };
 										完整节点路径 = `/video/${base64SecretEncode(JSON.stringify(链式代理数据), userID) + (config_JSON.启用0RTT ? '?ed=2560' : '')}`;
@@ -4324,7 +4324,7 @@ const PROXYIPPOOL节点标记前缀 = '__PROXYIPPOOL__';
 
 function 规范化PROXYIPPOOL协议(协议) {
 	const 标准协议 = String(协议 || 'proxyip').trim().toLowerCase();
-	return ['proxyip', 'socks5', 'http'].includes(标准协议) ? 标准协议 : 'proxyip';
+	return ['proxyip', 'socks5', 'http', 'https', 'turn', 'sstp'].includes(标准协议) ? 标准协议 : 'proxyip';
 }
 
 function 规范化PROXYIP地址(原始地址) {
@@ -4347,7 +4347,7 @@ function 规范化PROXYIPPOOL地址(原始地址, 协议 = 'proxyip') {
 	const 标准协议 = 规范化PROXYIPPOOL协议(协议);
 	if (标准协议 === 'proxyip') return 规范化PROXYIP地址(原始地址);
 	let 地址 = String(原始地址 || '').replace(/[\r\n\0]/g, '').trim().slice(0, 512);
-	地址 = 地址.replace(/^\/?(?:socks5|http):\/\//i, '').split('#')[0].trim().replace(/\s+/g, '');
+	地址 = 地址.replace(/^\/?(?:socks5|http|https|turn|sstp):\/\//i, '').split('#')[0].trim().replace(/\s+/g, '');
 	return 地址;
 }
 
@@ -4361,7 +4361,7 @@ function 规范化PROXYIPPOOL配置(原始配置 = {}, 旧PROXYIP = 'auto') {
 		if (!节点配置 || typeof 节点配置 !== 'object' || Array.isArray(节点配置)) return;
 		const 协议 = 规范化PROXYIPPOOL协议(节点配置.协议 || 节点配置.protocol || 'proxyip');
 		const 地址 = 规范化PROXYIPPOOL地址(节点配置.地址, 协议);
-		if (!地址 || 地址.toLowerCase() === 'auto') return;
+		if (!地址 || (地址.toLowerCase() === 'auto' && 协议 !== 'proxyip')) return;
 		let id = String(节点配置.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || `proxyip-${索引 + 1}`;
 		const 基础ID = id;
 		let 后缀 = 2;

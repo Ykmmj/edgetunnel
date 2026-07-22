@@ -136,7 +136,7 @@
 
 ## 🧩 PROXYIPPOOL 客户端策略组
 
-后台管理面板可维护一组 `proxyip`、`socks5` 或 `http` 代理节点。启用后更新 Clash/Mihomo 或 Sing-box 订阅，客户端会得到三个互相独立的选择组：
+后台管理面板可维护一组 `proxyip`、`socks5`、`http`、`https`、`turn` 或 `sstp` 代理节点。节点编辑器复用 **Cloudflare CDN 访问设置** 的反代模式、代理验证和“获取更多 PROXYIP/SOCKS5/HTTP/HTTPS”资源选择功能。启用后更新 Clash/Mihomo 或 Sing-box 订阅，客户端会得到三个互相独立的选择组：
 
 - `ChatGPT`
 - `Claude`
@@ -146,7 +146,7 @@
 
 PROXYIPPOOL 只影响订阅生成，不参与 Worker 运行时的服务端域名分流。原有 **Cloudflare CDN 访问设置**、单一 `PROXYIP`、路径参数和其他代理功能保持不变。
 
-`proxyip` 节点支持 IPv4、IPv6、域名和端口；粘贴 `IPv6/128` 时会自动移除 CIDR 后缀。池配置保存到绑定的 KV `config.json`，保存后需要在客户端更新订阅。
+`proxyip` 节点支持 IPv4、IPv6、域名和端口；粘贴 `IPv6/128` 时会自动移除 CIDR 后缀。“启用自动获取”节点会沿用 Cloudflare CDN 访问设置中的默认 PROXYIP。池配置保存到绑定的 KV `config.json`，保存后需要在客户端更新订阅。
 
 ---
 
