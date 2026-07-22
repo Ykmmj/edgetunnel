@@ -146,7 +146,7 @@
 
 PROXYIPPOOL 只影响订阅生成，不参与 Worker 运行时的服务端域名分流。原有 **Cloudflare CDN 访问设置**、单一 `PROXYIP`、路径参数和其他代理功能保持不变。
 
-`proxyip` 节点支持 IPv4、IPv6、域名和端口；粘贴 `IPv6/128` 时会自动移除 CIDR 后缀。“启用自动获取”节点会沿用 Cloudflare CDN 访问设置中的默认 PROXYIP。池配置保存到绑定的 KV `config.json`，保存后需要在客户端更新订阅。
+`proxyip` 节点支持 IPv4、IPv6、域名和端口；粘贴 `IPv6/128` 时会自动移除 CIDR 后缀。PROXYIPPOOL 只保存地址明确的固定节点，不接受 `auto`。池配置保存到绑定的 KV `config.json`，保存后需要在客户端更新订阅。
 
 ---
 
