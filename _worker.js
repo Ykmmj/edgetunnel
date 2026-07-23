@@ -1,4 +1,4 @@
-const Version = '2026-07-23 04:39:30';
+const Version = '2026-07-23 05:27:54';
 let config_JSON, 缓存SOCKS5白名单 = null, 调试日志打印 = false;
 let SOCKS5白名单 = ['*tapecontent.net', '*cloudatacdn.com', '*loadshare.org', '*cdn-centaurus.com', 'scholar.google.com'];
 const 默认Pages静态页面 = 'https://ykmmj.github.io/EDT-Pages.github.io';
@@ -4507,6 +4507,20 @@ function 应用ClashPROXYIPPOOL补丁(原始YAML, config_JSON = {}) {
 	if (池节点.length === 0 || config_JSON?.订阅转换配置?.SUBLIST) return 原始YAML;
 	const 业务组名称 = Object.keys(PROXYIPPOOL客户端业务域名);
 	let lines = String(原始YAML || '').split('\n');
+	const 隧道开始标记 = '  # PROXYIPPOOL-TUNNELS-BEGIN';
+	const 隧道结束标记 = '  # PROXYIPPOOL-TUNNELS-END';
+	while (true) {
+		const start = lines.indexOf(隧道开始标记);
+		if (start < 0) break;
+		const end = lines.indexOf(隧道结束标记, start + 1);
+		lines.splice(start, end >= 0 ? end - start + 1 : 1);
+	}
+	const 空内联隧道段 = lines.findIndex(line => /^tunnels:\s*\[\s*\]\s*(?:#.*)?$/.test(line));
+	if (空内联隧道段 >= 0) lines[空内联隧道段] = 'tunnels:';
+	if (lines.some(line => /^tunnels:\s*\S/.test(line) && !/^tunnels:\s*(?:#.*)?$/.test(line))) {
+		console.warn('[PROXYIPPOOL] 检测到内联 tunnels 配置，无法安全追加本地隧道，跳过分流节点注入');
+		return 原始YAML;
+	}
 
 	const 查找顶级段 = 段名 => {
 		const start = lines.findIndex(line => new RegExp(`^${段名}:\\s*(?:#.*)?$`).test(line));
@@ -4558,15 +4572,39 @@ function 应用ClashPROXYIPPOOL补丁(原始YAML, config_JSON = {}) {
 	};
 	const 解析节点 = 节点 => {
 		const parsed = 获取SOCKS5账号(节点.地址, 获取代理默认端口(节点.协议));
+		const server = String(parsed.hostname || '').replace(/^\[|\]$/g, '');
+		const port = Number(parsed.port);
 		return {
 			name: `PROXYIPPOOL · ${节点.名称}`,
 			type: 节点.协议 === 'socks5' ? 'socks5' : 'http',
-			server: String(parsed.hostname || '').replace(/^\[|\]$/g, ''),
-			port: Number(parsed.port),
+			server,
+			port,
+			target: `${server.includes(':') ? `[${server}]` : server}:${port}`,
 			username: parsed.username,
 			password: parsed.password,
 			tls: 节点.协议 === 'https'
 		};
+	};
+	const 获取已占用隧道端口 = () => {
+		const used = new Set();
+		const segment = 查找顶级段('tunnels');
+		if (segment.start < 0) return used;
+		for (const line of lines.slice(segment.start + 1, segment.end)) {
+			let address = line.match(/\baddress:\s*(?:"([^"]+)"|'([^']+)'|([^,}\s#]+))/)?.slice(1).find(Boolean) || '';
+			if (!address) address = line.match(/^\s*-\s*(?:tcp|udp|tcp\/udp)\s*,\s*([^,]+)/i)?.[1] || '';
+			const port = Number(String(address).trim().match(/:(\d{1,5})$/)?.[1]);
+			if (Number.isInteger(port) && port > 0 && port <= 65535) used.add(port);
+		}
+		return used;
+	};
+	const 分配本地隧道端口 = used => {
+		for (let port = 39000; port <= 39999; port++) {
+			if (!used.has(port)) {
+				used.add(port);
+				return port;
+			}
+		}
+		throw new Error('39000-39999 本地隧道端口已全部占用');
 	};
 
 	const 组段 = 查找顶级段('proxy-groups');
@@ -4579,26 +4617,44 @@ function 应用ClashPROXYIPPOOL补丁(原始YAML, config_JSON = {}) {
 	}
 
 	const 节点定义 = [];
+	const 隧道定义 = [隧道开始标记];
 	const 客户端节点名称 = [];
+	const 已占用隧道端口 = 获取已占用隧道端口();
 	for (const 节点 of 池节点) {
 		try {
 			const parsed = 解析节点(节点);
 			if (!parsed.server || !Number.isInteger(parsed.port) || parsed.port <= 0 || parsed.port > 65535) throw new Error('代理端点无效');
+			const 本地端口 = 分配本地隧道端口(已占用隧道端口);
 			客户端节点名称.push(parsed.name);
+			隧道定义.push('  - network: [tcp]');
+			隧道定义.push(`    address: 127.0.0.1:${本地端口}`);
+			隧道定义.push(`    target: ${JSON.stringify(parsed.target)}`);
+			隧道定义.push(`    proxy: ${JSON.stringify(节点选择组)}`);
 			节点定义.push(`  - name: ${JSON.stringify(parsed.name)}`);
 			节点定义.push(`    type: ${parsed.type}`);
-			节点定义.push(`    server: ${JSON.stringify(parsed.server)}`);
-			节点定义.push(`    port: ${parsed.port}`);
+			节点定义.push('    server: 127.0.0.1');
+			节点定义.push(`    port: ${本地端口}`);
 			if (parsed.username) 节点定义.push(`    username: ${JSON.stringify(parsed.username)}`);
 			if (parsed.password) 节点定义.push(`    password: ${JSON.stringify(parsed.password)}`);
-			if (parsed.tls) 节点定义.push('    tls: true');
+			if (parsed.tls) {
+				节点定义.push('    tls: true');
+				节点定义.push(`    sni: ${JSON.stringify(parsed.server)}`);
+			}
 			节点定义.push('    udp: false');
-			节点定义.push(`    dialer-proxy: ${JSON.stringify(节点选择组)}`);
 		} catch (error) {
 			console.warn(`[PROXYIPPOOL] ${节点.名称} 无法生成 Clash 节点: ${error?.message || error}`);
 		}
 	}
 	if (客户端节点名称.length === 0) return 原始YAML;
+	隧道定义.push(隧道结束标记);
+
+	let 隧道段 = 查找顶级段('tunnels');
+	if (隧道段.start < 0) {
+		const proxiesStart = 查找顶级段('proxies').start;
+		lines.splice(proxiesStart >= 0 ? proxiesStart : 0, 0, 'tunnels:', ...隧道定义);
+	} else {
+		lines.splice(隧道段.end, 0, ...隧道定义);
+	}
 
 	const poolPrefix = 'PROXYIPPOOL · ';
 	let 节点段 = 查找顶级段('proxies');
