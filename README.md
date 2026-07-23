@@ -136,7 +136,7 @@
 
 ## 🧩 PROXYIPPOOL 客户端策略组
 
-后台管理面板可维护一组 `proxyip`、`socks5`、`http`、`https`、`turn` 或 `sstp` 代理节点。节点编辑器复用 **Cloudflare CDN 访问设置** 的反代模式、代理验证和“获取更多 PROXYIP/SOCKS5/HTTP/HTTPS”资源选择功能。启用后更新 Clash/Mihomo 或 Sing-box 订阅，客户端会得到三个互相独立的选择组：
+后台管理面板可维护一组 `socks5`、`http` 或 `https` 落地代理节点。启用后更新 Clash/Mihomo 或 Sing-box 订阅，客户端会得到三个互相独立的选择组：
 
 - `ChatGPT`
 - `Claude`
@@ -144,9 +144,9 @@
 
 客户端按对应域名规则自动进入业务组，用户可以在三个组中分别选择不同的池节点。例如 ChatGPT 使用台湾节点、Claude 使用日本节点、Netflix 使用马来西亚节点。
 
-PROXYIPPOOL 只影响订阅生成，不参与 Worker 运行时的服务端域名分流。原有 **Cloudflare CDN 访问设置**、单一 `PROXYIP`、路径参数和其他代理功能保持不变。
+每个落地代理都通过客户端现有的 `🚀 节点选择` 建立连接，因此第一跳继续由客户端自动测速或用户手动选择。Worker 会让命中的分流落地覆盖当前节点路径中的全局代理，避免形成“全局代理 → 分流代理”的三跳链路。原有 **Cloudflare CDN 访问设置**、单一 `PROXYIP`、路径参数和其他代理功能保持不变。
 
-`proxyip` 节点支持 IPv4、IPv6、域名和端口；粘贴 `IPv6/128` 时会自动移除 CIDR 后缀。PROXYIPPOOL 只保存地址明确的固定节点，不接受 `auto`。池配置保存到绑定的 KV `config.json`，保存后需要在客户端更新订阅。
+裸 `PROXYIP`、TURN 和 SSTP 不是 Clash/Sing-box 可直接链式拨号的通用落地节点，不再用于此客户端分流池；需要先转换成 SOCKS5/HTTP/HTTPS 服务。池配置保存到绑定的 KV `config.json`，保存后需要在客户端更新订阅。
 
 ---
 

@@ -1,4 +1,4 @@
-const Version = '2026-07-22 17:00:28';
+const Version = '2026-07-23 04:39:30';
 let config_JSON, 缓存SOCKS5白名单 = null, 调试日志打印 = false;
 let SOCKS5白名单 = ['*tapecontent.net', '*cloudatacdn.com', '*loadshare.org', '*cdn-centaurus.com', 'scholar.google.com'];
 const 默认Pages静态页面 = 'https://ykmmj.github.io/EDT-Pages.github.io';
@@ -66,11 +66,13 @@ export default {
 				if (请求前8总和 === 目标前8总和 && 请求UUID.slice(-12) === 目标UUID.slice(-12)) return new Response(JSON.stringify({ Version: Number(String(Version).replace(/\D+/g, '')) }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
 			}
 		} else if (管理员密码 && upgradeHeader === 'websocket') {// WebSocket代理
-			const 反代上下文 = await 反代参数获取(url, userID, 默认反代IP, 默认反代兜底);
+			const PROXYIPPOOL运行端点 = await 读取PROXYIPPOOL运行端点(env);
+			const 反代上下文 = await 反代参数获取(url, userID, 默认反代IP, 默认反代兜底, PROXYIPPOOL运行端点);
 			log(`[WebSocket] 命中请求: ${url.pathname}${url.search}`);
 			return await 处理WS请求(request, userID, url, 反代上下文);
 		} else if (管理员密码 && !访问路径.startsWith('admin/') && 访问路径 !== 'login' && request.method === 'POST') {// gRPC/XHTTP代理
-			const 反代上下文 = await 反代参数获取(url, userID, 默认反代IP, 默认反代兜底);
+			const PROXYIPPOOL运行端点 = await 读取PROXYIPPOOL运行端点(env);
+			const 反代上下文 = await 反代参数获取(url, userID, 默认反代IP, 默认反代兜底, PROXYIPPOOL运行端点);
 			const referer = request.headers.get('Referer') || '';
 			const 命中XHTTP特征 = referer.includes('x_padding', 14) || referer.includes('x_padding=');
 			if (!命中XHTTP特征 && contentType.startsWith('application/grpc')) {
@@ -233,6 +235,7 @@ export default {
 								newConfig.反代.PROXYIPPOOL = 规范化PROXYIPPOOL配置(newConfig.反代.PROXYIPPOOL, newConfig.反代[特征码字典[0]]);
 								await env.KV.put('config.json', JSON.stringify(newConfig, null, 2));
 								config_JSON = newConfig;
+								清空PROXYIPPOOL端点缓存();
 								ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Save_Config', config_JSON));
 								return new Response(JSON.stringify({ success: true, message: '配置已保存' }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
 							} catch (error) {
@@ -408,7 +411,7 @@ export default {
 							const ECHLINK参数 = config_JSON.ECH ? `&ech=${encodeURIComponent((config_JSON.ECHConfig.SNI ? config_JSON.ECHConfig.SNI + '+' : '') + config_JSON.ECHConfig.DNS)}` : '';
 							const isLoonOrSurge = ua.includes('loon') || ua.includes('surge');
 							const { type: 传输协议, 路径字段名, 域名字段名 } = 获取传输协议配置(config_JSON);
-							const 生成节点链接 = (原始地址, 池节点 = null) => {
+							订阅内容 = 其他节点LINK + 完整优选IP.map(原始地址 => {
 								// 统一正则: 匹配 域名/IPv4/IPv6地址 + 可选端口 + 可选备注
 								// 示例:
 								//   - 域名: hj.xmm1993.top:2096#备注 或 example.com
@@ -428,22 +431,11 @@ export default {
 									console.warn(`[订阅内容] 不规范的IP格式已忽略: ${原始地址}`);
 									return null;
 								}
-								if (池节点) 节点备注 = 生成PROXYIPPOOL节点标记(池节点);
 
 								let 完整节点路径 = config_JSON.完整节点路径;
 
-								const 链式代理匹配 = 池节点 ? null : 节点备注.match(/\$(socks5|http|https|turn|sstp):\/\/([^#\s]+)/i);
-								if (池节点?.协议 === 'proxyip') {
-									完整节点路径 = (`${config_JSON.PATH}/proxyip=${池节点.地址}`).replace(/\/\//g, '/') + (config_JSON.启用0RTT ? '?ed=2560' : '');
-								} else if (池节点 && ['socks5', 'http', 'https', 'turn', 'sstp'].includes(池节点.协议)) {
-									try {
-										const 链式代理数据 = { type: 池节点.协议, ...获取SOCKS5账号(池节点.地址, 获取代理默认端口(池节点.协议)) };
-										完整节点路径 = `/video/${base64SecretEncode(JSON.stringify(链式代理数据), userID) + (config_JSON.启用0RTT ? '?ed=2560' : '')}`;
-									} catch (error) {
-										console.warn(`[PROXYIPPOOL] ${池节点.名称} 参数无效，已跳过: ${error?.message || error}`);
-										return null;
-									}
-								} else if (链式代理匹配) {
+								const 链式代理匹配 = 节点备注.match(/\$(socks5|http|https|turn|sstp):\/\/([^#\s]+)/i);
+								if (链式代理匹配) {
 									try {
 										const 代理协议 = 链式代理匹配[1].toLowerCase(), 代理参数 = 链式代理匹配[2];
 										const 链式代理数据 = { type: 代理协议, ...获取SOCKS5账号(代理参数, 获取代理默认端口(代理协议)) };
@@ -471,12 +463,7 @@ export default {
 									const 传输路径参数值 = 获取传输路径参数值(config_JSON, 完整节点路径, 作为优选订阅生成器);
 									return `${协议类型}://00000000-0000-4000-8000-000000000000@${节点地址}:${节点端口}?security=tls&type=${传输协议 + ECHLINK参数}&${域名字段名}=example.com&fp=${config_JSON.Fingerprint}&sni=example.com&${路径字段名}=${encodeURIComponent(传输路径参数值) + TLS分片参数}&encryption=none#${encodeURIComponent(节点备注)}`;
 								}
-							};
-							const 常规节点链接 = 完整优选IP.map(原始地址 => 生成节点链接(原始地址));
-							const 启用池节点 = 获取启用PROXYIPPOOL节点(config_JSON);
-							const 池节点基础地址 = 完整优选IP.length > 0 ? 完整优选IP : [`${host}:443#PROXYIPPOOL`];
-							const 池节点链接 = 启用池节点.map((节点, 索引) => 生成节点链接(池节点基础地址[索引 % 池节点基础地址.length], 节点));
-							订阅内容 = 其他节点LINK + 常规节点链接.concat(池节点链接).filter(item => item !== null).join('\n');
+							}).filter(item => item !== null).join('\n');
 						} else { // 订阅转换
 							const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&token=' + 今日订阅转换后端专属TOKEN + '&cnIspCode=' + 识别运营商(request) + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : ''))}&config=${encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&list=${config_JSON.订阅转换配置.SUBLIST}&scv=${config_JSON.跳过证书验证}&xudp=${config_JSON.订阅转换配置.XUDP}&udp=${config_JSON.订阅转换配置.UDP}&tls13=${config_JSON.订阅转换配置.TLS13}&append_type=${config_JSON.订阅转换配置.APPEND_TYPE}&sort=${config_JSON.订阅转换配置.SORT}`;
 							try {
@@ -1997,6 +1984,9 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
 	const ctx代理全局 = 反代上下文.代理全局 !== undefined ? 反代上下文.代理全局 : false;
 	const ctx代理参数 = 反代上下文.代理参数 || {};
 	const ctx反代兜底 = 反代上下文.反代兜底 !== undefined ? 反代上下文.反代兜底 : true;
+	const ctxPROXYIPPOOL端点 = 反代上下文.PROXYIPPOOL端点 instanceof Set ? 反代上下文.PROXYIPPOOL端点 : new Set(反代上下文.PROXYIPPOOL端点 || []);
+	const 当前目标端点 = 规范化PROXYIPPOOL端点键(host, portNum);
+	const 命中PROXYIPPOOL端点 = Boolean(当前目标端点 && ctxPROXYIPPOOL端点.has(当前目标端点));
 	let 反代数组索引 = 0;
 	log(`[TCP转发] 目标: ${host}:${portNum} | 反代IP: ${ctx反代IP} | 反代兜底: ${ctx反代兜底 ? '是' : '否'} | 反代类型: ${ctx代理类型 || 'proxyip'} | 全局: ${ctx代理全局 ? '是' : '否'}`);
 	const 连接超时毫秒 = 1000;
@@ -2214,6 +2204,15 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
 			}
 		}
 	}
+	if (命中PROXYIPPOOL端点) {
+		log(`[TCP转发] 分流落地端点覆盖全局代理: ${当前目标端点}`);
+		remoteConnWrapper.retryConnect = null;
+		const initialSocket = await connectDirect(host, portNum, rawData, true);
+		remoteConnWrapper.socket = initialSocket;
+		connectStreams(initialSocket, ws, respHeader, null);
+		return;
+	}
+
 	remoteConnWrapper.retryConnect = async () => connecttoPry(!已通过代理发送首包);
 
 	if (ctx代理类型 && (ctx代理全局 || SOCKS5白名单.some(p => new RegExp(`^${p.replace(/\*/g, '.*')}$`, 'i').test(host)))) {
@@ -4320,7 +4319,9 @@ const PROXYIPPOOL客户端业务域名 = Object.freeze({
 	Claude: ['claude.ai', 'anthropic.com', 'anthropic-static.com'],
 	Netflix: ['netflix.com', 'netflix.net', 'nflxvideo.net', 'nflximg.net', 'nflximg.com', 'nflxso.net', 'nflxext.com', 'nflxsearch.net']
 });
-const PROXYIPPOOL节点标记前缀 = '__PROXYIPPOOL__';
+const PROXYIPPOOL客户端支持协议 = Object.freeze(['socks5', 'http', 'https']);
+const PROXYIPPOOL端点缓存TTL = 30 * 1000;
+let PROXYIPPOOL端点缓存 = { revision: 0, expiresAt: 0, endpoints: new Set(), loading: null };
 
 function 规范化PROXYIPPOOL协议(协议) {
 	const 标准协议 = String(协议 || 'proxyip').trim().toLowerCase();
@@ -4387,11 +4388,58 @@ function 规范化PROXYIPPOOL配置(原始配置 = {}, 旧PROXYIP = 'auto') {
 function 获取启用PROXYIPPOOL节点(config_JSON = {}) {
 	const 反代配置 = config_JSON?.反代 && typeof config_JSON.反代 === 'object' ? config_JSON.反代 : {};
 	const 池配置 = 规范化PROXYIPPOOL配置(反代配置.PROXYIPPOOL, 反代配置[特征码字典[0]]);
-	return 池配置.启用 ? 池配置.节点.filter(节点 => 节点.启用) : [];
+	return 池配置.启用 ? 池配置.节点.filter(节点 => 节点.启用 && PROXYIPPOOL客户端支持协议.includes(节点.协议)) : [];
 }
 
-function 生成PROXYIPPOOL节点标记(节点) {
-	return `${PROXYIPPOOL节点标记前缀}${节点.id}__${节点.名称}`;
+function 清空PROXYIPPOOL端点缓存() {
+	PROXYIPPOOL端点缓存 = { revision: PROXYIPPOOL端点缓存.revision + 1, expiresAt: 0, endpoints: new Set(), loading: null };
+}
+
+function 规范化PROXYIPPOOL端点键(hostname, port) {
+	const host = String(hostname || '').trim().replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase();
+	const numericPort = Number(port);
+	if (!host || !Number.isInteger(numericPort) || numericPort <= 0 || numericPort > 65535) return '';
+	return `${host.includes(':') ? `[${host}]` : host}:${numericPort}`;
+}
+
+function 从PROXYIPPOOL配置提取端点(config = {}) {
+	const endpoints = new Set();
+	for (const 节点 of 获取启用PROXYIPPOOL节点(config)) {
+		try {
+			const parsed = 获取SOCKS5账号(节点.地址, 获取代理默认端口(节点.协议));
+			const key = 规范化PROXYIPPOOL端点键(parsed.hostname, parsed.port);
+			if (key) endpoints.add(key);
+		} catch (error) {
+			console.warn(`[PROXYIPPOOL] 忽略无效端点 ${节点.名称}: ${error?.message || error}`);
+		}
+	}
+	return endpoints;
+}
+
+async function 读取PROXYIPPOOL运行端点(env) {
+	const now = Date.now();
+	if (PROXYIPPOOL端点缓存.expiresAt > now) return new Set(PROXYIPPOOL端点缓存.endpoints);
+	if (!PROXYIPPOOL端点缓存.loading) {
+		const revision = PROXYIPPOOL端点缓存.revision;
+		const loading = (async () => {
+			let endpoints = new Set();
+			try {
+				if (env?.KV && typeof env.KV.get === 'function') {
+					const raw = await env.KV.get('config.json');
+					if (raw) endpoints = 从PROXYIPPOOL配置提取端点(JSON.parse(raw));
+				}
+			} catch (error) {
+				console.warn(`[PROXYIPPOOL] 读取运行端点失败: ${error?.message || error}`);
+			}
+			if (PROXYIPPOOL端点缓存.revision === revision) {
+				PROXYIPPOOL端点缓存 = { revision, expiresAt: Date.now() + PROXYIPPOOL端点缓存TTL, endpoints, loading: null };
+			}
+			return endpoints;
+		})();
+		PROXYIPPOOL端点缓存.loading = loading;
+	}
+	const loading = PROXYIPPOOL端点缓存.loading;
+	return loading ? new Set(await loading) : new Set(PROXYIPPOOL端点缓存.endpoints);
 }
 
 async function 检测PROXYIP可用性(request, PROXYIP地址, uuid) {
@@ -4456,9 +4504,8 @@ async function 检测PROXYIP可用性(request, PROXYIP地址, uuid) {
 
 function 应用ClashPROXYIPPOOL补丁(原始YAML, config_JSON = {}) {
 	const 池节点 = 获取启用PROXYIPPOOL节点(config_JSON);
-	if (池节点.length === 0) return 原始YAML;
+	if (池节点.length === 0 || config_JSON?.订阅转换配置?.SUBLIST) return 原始YAML;
 	const 业务组名称 = Object.keys(PROXYIPPOOL客户端业务域名);
-	const 仅节点列表 = Boolean(config_JSON?.订阅转换配置?.SUBLIST);
 	let lines = String(原始YAML || '').split('\n');
 
 	const 查找顶级段 = 段名 => {
@@ -4487,113 +4534,151 @@ function 应用ClashPROXYIPPOOL补丁(原始YAML, config_JSON = {}) {
 		const flow = line.match(/\bname:\s*("(?:\\.|[^"])*"|'(?:''|[^'])*'|[^,}]+)/);
 		return flow ? 解析YAML标量(flow[1]) : null;
 	};
-	const 替换行内名称 = (line, 新名称) => {
-		if (/^\s*-\s*name:\s*/.test(line)) return line.replace(/^(\s*-\s*name:\s*).+$/, `$1${JSON.stringify(新名称)}`);
-		return line.replace(/(\bname:\s*)("(?:\\.|[^"])*"|'(?:''|[^'])*'|[^,}]+)/, `$1${JSON.stringify(新名称)}`);
-	};
-	const 分割流列表 = content => {
-		const items = [];
-		let current = '', quote = '', escaped = false;
-		for (const char of content) {
-			if (escaped) { current += char; escaped = false; continue }
-			if (char === '\\' && quote === '"') { current += char; escaped = true; continue }
-			if (quote) {
-				current += char;
-				if (char === quote) quote = '';
-				continue;
-			}
-			if (char === '"' || char === "'") { quote = char; current += char; continue }
-			if (char === ',') { if (current.trim()) items.push(current.trim()); current = ''; continue }
-			current += char;
+	const 拆分组块 = (start, end) => {
+		const blocks = [];
+		let current = [];
+		for (const line of lines.slice(start + 1, end)) {
+			if (/^\s{2}-\s/.test(line) && current.length) { blocks.push(current); current = [] }
+			current.push(line);
 		}
-		if (current.trim()) items.push(current.trim());
-		return items;
+		if (current.length) blocks.push(current);
+		return blocks;
 	};
-	const 清理流式池引用 = line => line.replace(/(proxies:\s*\[)([^\]]*)(\])/g, (_, prefix, content, suffix) => {
-		const 保留项 = 分割流列表(content).filter(item => !item.includes(PROXYIPPOOL节点标记前缀));
-		return `${prefix}${保留项.join(', ')}${suffix}`;
-	});
+	const 识别节点选择组 = blocks => {
+		const named = blocks.map(block => ({ block, name: block.map(获取行内名称).find(Boolean) || '' }));
+		const exact = named.find(item => item.name === '🚀 节点选择');
+		if (exact) return exact.name;
+		const suffix = named.find(item => /节点选择\s*$/.test(item.name));
+		if (suffix) return suffix.name;
+		const heuristic = named.find(item => {
+			const text = item.block.join('\n');
+			return /type:\s*select\b/.test(text) && /自动选择/.test(text) && /故障转移/.test(text) && /负载均衡/.test(text);
+		});
+		return heuristic?.name || '';
+	};
+	const 解析节点 = 节点 => {
+		const parsed = 获取SOCKS5账号(节点.地址, 获取代理默认端口(节点.协议));
+		return {
+			name: `PROXYIPPOOL · ${节点.名称}`,
+			type: 节点.协议 === 'socks5' ? 'socks5' : 'http',
+			server: String(parsed.hostname || '').replace(/^\[|\]$/g, ''),
+			port: Number(parsed.port),
+			username: parsed.username,
+			password: parsed.password,
+			tls: 节点.协议 === 'https'
+		};
+	};
 
-	const 节点段 = 查找顶级段('proxies');
-	if (节点段.start < 0) return 原始YAML;
-	const 已发现节点 = new Map();
-	for (let i = 节点段.start + 1; i < 节点段.end; i++) {
-		const 原名称 = 获取行内名称(lines[i]);
-		if (!原名称 || !原名称.includes(PROXYIPPOOL节点标记前缀)) continue;
-		const 匹配节点 = 池节点.find(节点 => 原名称.includes(`${PROXYIPPOOL节点标记前缀}${节点.id}__`));
-		if (!匹配节点) continue;
-		const 显示名称 = `PROXYIPPOOL · ${匹配节点.名称}`;
-		lines[i] = 替换行内名称(lines[i], 显示名称);
-		已发现节点.set(匹配节点.id, 显示名称);
+	const 组段 = 查找顶级段('proxy-groups');
+	if (组段.start < 0) return 原始YAML;
+	const 原组块 = 拆分组块(组段.start, 组段.end);
+	const 节点选择组 = 识别节点选择组(原组块);
+	if (!节点选择组) {
+		console.warn('[PROXYIPPOOL] 未找到客户端节点选择组，跳过分流节点注入');
+		return 原始YAML;
 	}
-	const 客户端节点名称 = 池节点.map(节点 => 已发现节点.get(节点.id)).filter(Boolean);
-	if (客户端节点名称.length === 0 || 仅节点列表) return lines.join('\n');
 
-	let 组段 = 查找顶级段('proxy-groups');
-	if (组段.start < 0) {
-		const 规则段 = 查找顶级段('rules');
-		const 插入位置 = 规则段.start >= 0 ? 规则段.start : lines.length;
-		lines.splice(插入位置, 0, 'proxy-groups:');
-		组段 = 查找顶级段('proxy-groups');
+	const 节点定义 = [];
+	const 客户端节点名称 = [];
+	for (const 节点 of 池节点) {
+		try {
+			const parsed = 解析节点(节点);
+			if (!parsed.server || !Number.isInteger(parsed.port) || parsed.port <= 0 || parsed.port > 65535) throw new Error('代理端点无效');
+			客户端节点名称.push(parsed.name);
+			节点定义.push(`  - name: ${JSON.stringify(parsed.name)}`);
+			节点定义.push(`    type: ${parsed.type}`);
+			节点定义.push(`    server: ${JSON.stringify(parsed.server)}`);
+			节点定义.push(`    port: ${parsed.port}`);
+			if (parsed.username) 节点定义.push(`    username: ${JSON.stringify(parsed.username)}`);
+			if (parsed.password) 节点定义.push(`    password: ${JSON.stringify(parsed.password)}`);
+			if (parsed.tls) 节点定义.push('    tls: true');
+			节点定义.push('    udp: false');
+			节点定义.push(`    dialer-proxy: ${JSON.stringify(节点选择组)}`);
+		} catch (error) {
+			console.warn(`[PROXYIPPOOL] ${节点.名称} 无法生成 Clash 节点: ${error?.message || error}`);
+		}
 	}
-	const 组内容 = lines.slice(组段.start + 1, 组段.end);
-	const blocks = [];
-	let current = [];
-	for (const line of 组内容) {
-		if (/^\s{2}-\s/.test(line) && current.length) { blocks.push(current); current = [] }
-		current.push(line);
+	if (客户端节点名称.length === 0) return 原始YAML;
+
+	const poolPrefix = 'PROXYIPPOOL · ';
+	let 节点段 = 查找顶级段('proxies');
+	if (节点段.start < 0) {
+		lines.unshift('proxies:', ...节点定义);
+	} else {
+		const 保留节点内容 = [];
+		for (const block of 拆分组块(节点段.start, 节点段.end)) {
+			const name = block.map(获取行内名称).find(Boolean) || '';
+			if (!name.startsWith(poolPrefix)) 保留节点内容.push(...block);
+		}
+		lines.splice(节点段.start + 1, 节点段.end - 节点段.start - 1, ...保留节点内容, ...节点定义);
 	}
-	if (current.length) blocks.push(current);
+
+	const 更新后组段 = 查找顶级段('proxy-groups');
 	const 保留组内容 = [];
-	for (const block of blocks) {
-		const 组名 = block.map(获取行内名称).find(Boolean);
-		if (业务组名称.includes(组名)) continue;
-		for (const line of block) {
-			if (line.includes(PROXYIPPOOL节点标记前缀) && /^\s{6,}-\s*/.test(line)) continue;
-			保留组内容.push(清理流式池引用(line));
-		}
+	for (const block of 拆分组块(更新后组段.start, 更新后组段.end)) {
+		const name = block.map(获取行内名称).find(Boolean);
+		if (!业务组名称.includes(name)) 保留组内容.push(...block);
 	}
 	const 新组内容 = [];
 	for (const 组名 of 业务组名称) {
 		新组内容.push(`  - name: ${JSON.stringify(组名)}`, '    type: select', '    proxies:');
 		for (const 节点名称 of 客户端节点名称) 新组内容.push(`      - ${JSON.stringify(节点名称)}`);
 	}
-	lines.splice(组段.start + 1, 组段.end - 组段.start - 1, ...保留组内容, ...新组内容);
+	lines.splice(更新后组段.start + 1, 更新后组段.end - 更新后组段.start - 1, ...保留组内容, ...新组内容);
 
 	let 规则段 = 查找顶级段('rules');
 	if (规则段.start < 0) {
 		lines.push('rules:');
 		规则段 = 查找顶级段('rules');
 	}
+	const 业务规则前缀 = Object.keys(PROXYIPPOOL客户端业务域名).map(name => `,${name}`);
+	const 原规则 = lines.slice(规则段.start + 1, 规则段.end).filter(line => !业务规则前缀.some(suffix => line.trimEnd().endsWith(suffix)));
 	const 新规则 = [];
 	for (const [组名, 域名列表] of Object.entries(PROXYIPPOOL客户端业务域名)) {
 		for (const 域名 of 域名列表) 新规则.push(`  - DOMAIN-SUFFIX,${域名},${组名}`);
 	}
-	lines.splice(规则段.start + 1, 0, ...新规则);
+	lines.splice(规则段.start + 1, 规则段.end - 规则段.start - 1, ...新规则, ...原规则);
 	return lines.join('\n');
 }
 
 function 应用SingboxPROXYIPPOOL补丁(config, config_JSON = {}) {
 	const 池节点 = 获取启用PROXYIPPOOL节点(config_JSON);
-	if (池节点.length === 0 || !Array.isArray(config?.outbounds)) return config;
+	if (池节点.length === 0 || config_JSON?.订阅转换配置?.SUBLIST || !Array.isArray(config?.outbounds)) return config;
 	const 业务组名称 = Object.keys(PROXYIPPOOL客户端业务域名);
-	const 原始标记Tag = new Set();
+	const 选择器 = config.outbounds.filter(outbound => outbound?.type === 'selector' && typeof outbound?.tag === 'string');
+	const 节点选择器 = 选择器.find(outbound => outbound.tag === '🚀 节点选择')
+		|| 选择器.find(outbound => /节点选择\s*$/.test(outbound.tag))
+		|| 选择器.find(outbound => {
+			const text = JSON.stringify(outbound.outbounds || []);
+			return /自动选择/.test(text) && /故障转移/.test(text) && /负载均衡/.test(text);
+		});
+	if (!节点选择器) {
+		console.warn('[PROXYIPPOOL] 未找到 Sing-box 节点选择器，跳过分流节点注入');
+		return config;
+	}
+
+	const poolPrefix = 'PROXYIPPOOL · ';
+	config.outbounds = config.outbounds.filter(outbound => !业务组名称.includes(outbound?.tag) && !String(outbound?.tag || '').startsWith(poolPrefix));
 	const 客户端节点Tag = [];
-	for (const outbound of config.outbounds) {
-		const 原Tag = String(outbound?.tag || '');
-		if (!原Tag.includes(PROXYIPPOOL节点标记前缀)) continue;
-		const 匹配节点 = 池节点.find(节点 => 原Tag.includes(`${PROXYIPPOOL节点标记前缀}${节点.id}__`));
-		if (!匹配节点) continue;
-		原始标记Tag.add(原Tag);
-		outbound.tag = `PROXYIPPOOL · ${匹配节点.名称}`;
-		客户端节点Tag.push(outbound.tag);
+	for (const 节点 of 池节点) {
+		try {
+			const parsed = 获取SOCKS5账号(节点.地址, 获取代理默认端口(节点.协议));
+			const tag = `${poolPrefix}${节点.名称}`;
+			const server = String(parsed.hostname || '').replace(/^\[|\]$/g, '');
+			const serverPort = Number(parsed.port);
+			if (!server || !Number.isInteger(serverPort) || serverPort <= 0 || serverPort > 65535) throw new Error('代理端点无效');
+			const outbound = 节点.协议 === 'socks5'
+				? { type: 'socks', tag, server, server_port: serverPort, version: '5', network: 'tcp', detour: 节点选择器.tag }
+				: { type: 'http', tag, server, server_port: serverPort, detour: 节点选择器.tag, ...(节点.协议 === 'https' ? { tls: { enabled: true } } : {}) };
+			if (parsed.username) outbound.username = parsed.username;
+			if (parsed.password) outbound.password = parsed.password;
+			config.outbounds.push(outbound);
+			客户端节点Tag.push(tag);
+		} catch (error) {
+			console.warn(`[PROXYIPPOOL] ${节点.名称} 无法生成 Sing-box 出站: ${error?.message || error}`);
+		}
 	}
 	if (客户端节点Tag.length === 0) return config;
-	for (const outbound of config.outbounds) {
-		if (Array.isArray(outbound?.outbounds)) outbound.outbounds = outbound.outbounds.filter(tag => !原始标记Tag.has(tag));
-	}
-	if (config_JSON?.订阅转换配置?.SUBLIST) return config;
-	config.outbounds = config.outbounds.filter(outbound => !业务组名称.includes(outbound?.tag));
 	for (const 组名 of 业务组名称) config.outbounds.push({ type: 'selector', tag: 组名, outbounds: [...客户端节点Tag] });
 	config.route = config.route && typeof config.route === 'object' ? config.route : {};
 	const 原规则 = Array.isArray(config.route.rules) ? config.route.rules.filter(rule => !业务组名称.includes(rule?.outbound)) : [];
@@ -5958,12 +6043,21 @@ async function 请求优选API(urls, 默认端口 = '443', 超时时间 = 3000) 
 	return [Array.from(results), LINK数组, 需要订阅转换订阅URLs, Array.from(反代IP池)];
 }
 
-async function 反代参数获取(url, uuid, 默认反代IP = '', 默认反代兜底 = true) {
+async function 反代参数获取(url, uuid, 默认反代IP = '', 默认反代兜底 = true, PROXYIPPOOL端点 = new Set()) {
 	const { searchParams } = url;
 	const pathname = decodeURIComponent(url.pathname);
 	const pathLower = pathname.toLowerCase();
 	let 反代IP = 默认反代IP, 启用SOCKS5反代 = null, 启用SOCKS5全局反代 = false, 我的SOCKS5账号 = '', parsedSocks5Address = {}, 启用反代兜底 = 默认反代兜底;
-	const 反代上下文 = { 木马反代地址: null, 反代IP, 代理类型: null, 代理账号: '', 代理全局: false, 代理参数: {}, 反代兜底: 启用反代兜底 };
+	const 反代上下文 = {
+		木马反代地址: null,
+		反代IP,
+		代理类型: null,
+		代理账号: '',
+		代理全局: false,
+		代理参数: {},
+		反代兜底: 启用反代兜底,
+		PROXYIPPOOL端点: PROXYIPPOOL端点 instanceof Set ? new Set(PROXYIPPOOL端点) : new Set(PROXYIPPOOL端点 || [])
+	};
 	const 保存快照 = () => {
 		反代上下文.反代IP = 反代IP;
 		反代上下文.代理类型 = 启用SOCKS5反代;
